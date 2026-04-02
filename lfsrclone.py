@@ -5,7 +5,7 @@ lfsrclone: rclone-based transfer agent for git-lfs
 
 from __future__ import annotations
 
-__version__ = "20220317.2.BETA"
+__version__ = "20260401.0.BETA"
 
 import argparse
 import atexit
