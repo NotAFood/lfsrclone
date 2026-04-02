@@ -29,23 +29,6 @@ This software is still beta. A *non-exhaustive* and only *roughly* ordered list 
 - [ ] Better parallel working so more than one thing can upload at the same time and make `--transfers` more correct.
 - [ ] real-world production testing
 
-## Open Questions
-
-- **Remote Filename Format**: Rather than `53/a0/53a079ad5d55c455b3d617a60117fd7f87ac8c0097454c63c3e5c91fdca9d1af` we can cut this down. One idea is to keep the first two hex bytes `53/a0` and then base32 (for case insensitivity) encode the rest (without those bytes for even more space savings). 
-
-    ```
-    import binascii, base64
-    hexhash = "53a079ad5d55c455b3d617a60117fd7f87ac8c0097454c63c3e5c91fdca9d1af"
-    filename = f"{hexhash[:2]}/{hexhash[2:4]}/{base64.b32encode(binascii.unhexlify(hexhash[4:])).decode()}"
-    ```
-    
-    This ends up being 54 characters with no loss of information.
-    
-    Do I make this an option? Or default. Is it worth it?
-    
-- **Content-based chunking**: Much further down the line (and maybe a totally new tool) but can apply content based chunking to split files before upload. Adds a whole level of complexity but also pretty useful for small changes to large binaries.
-
-
 
 ***
 ***
