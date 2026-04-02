@@ -5,10 +5,10 @@
 **lfsrclone** is an rclone-based custom transfer agent for git-lfs. It implements the
 [git-lfs custom transfer protocol](https://github.com/git-lfs/git-lfs/blob/main/docs/custom-transfers.md),
 reading JSON messages from stdin and writing JSON responses to stdout, while delegating
-actual file transfer to rclone via subprocess.
+actual file transfer to a persistent `rclone rcd` daemon via the rclone RC HTTP API.
 
-Single-file Python module (`lfsrclone.py`, ~230 lines) with no third-party runtime
-dependencies — stdlib only. Status: BETA, not actively developed.
+Single-file Python module (`lfsrclone.py`, ~280 lines) with no third-party runtime
+dependencies — stdlib only. Status: BETA, personal fork.
 
 ## Architecture
 
@@ -19,9 +19,13 @@ git-lfs  <--JSON over stdin/stdout-->  lfsrclone.py  <--subprocess-->  rclone
 - `main()`: Entry point. Constructs `Main()` and calls `.run()`.
 - `Main.__init__()`: CLI parsing (argparse) and logging setup only — no I/O.
 - `Main.run()`: Starts the LFS protocol: calls `init()` then `loop()`.
-- `Main.init()`: Handles the LFS `init` event (handshake).
+- `Main.init()`: Handles the LFS `init` event; starts the `rclone rcd` daemon.
 - `Main.loop()`: Event loop — dispatches `upload`/`download`/`terminate` events.
-- `Main.action()`: Builds rclone command, runs it, streams progress, reports completion.
+- `Main.action()`: Issues `operations/copyfile` to the RC API, polls progress, reports completion.
+- `Main._start_rcd()`: Spawns `rclone rcd` on a free loopback port; polls `rc/noop` until ready.
+- `Main._stop_rcd()`: Sends `core/quit` to the daemon and waits for it to exit.
+- `Main._rc()`: HTTP POST helper — sends JSON to an RC endpoint, returns decoded response.
+- `Main._poll_progress()`: Polls `job/status` + `core/stats` until transfer completes; emits LFS progress events.
 - `pathjoin()`: rclone-aware path join (handles `:` in remote paths).
 - `read()` / `write()`: JSON protocol over stdin/stdout.
 
@@ -121,30 +125,19 @@ stdlib only — no third-party runtime imports.
 
 ### Type Annotations
 
-Not currently used — listed as a TODO in the roadmap. Do not add type annotations
-to existing code unless specifically asked. New standalone functions may include
-annotations at your discretion.
+All public functions and methods are fully annotated. `from __future__ import annotations`
+is used for forward-reference compatibility. `from typing import Any` covers heterogeneous
+dicts (LFS messages, RC API responses).
 
 ### Error Handling
 
 - **Critical protocol errors**: `logging.critical()` then `sys.exit(1)`
-- **Subprocess errors**: Collected from rclone's JSON stderr, reported via the
-  git-lfs error protocol (`complete` event with `error` field)
-- **JSON decode errors**: Caught with `try/except json.JSONDecodeError`, appended
-  to error list, logged — does not crash the process
+- **RC API transfer errors**: Detected via `job/status` `success: false`; reported
+  via the git-lfs error protocol (`complete` event with `error` field)
 - **No bare `except:`** — always catch specific exceptions
 - **No custom exception classes** — uses stdlib exceptions and sys.exit
 
 ### Logging
-
-```python
-logging.basicConfig(
-    filename=args.log_file,      # Default: .git/lfsrclone.log
-    encoding="utf-8",
-    format="%(levelname)s:%(asctime)s: %(message)s",
-    level=getattr(logging, args.log_level),
-)
-```
 
 Use `logging.debug()` for tracing, `logging.info()` for milestones, `logging.critical()`
 for fatal errors. Never use `print()` for diagnostics — stdout is reserved for the
@@ -162,11 +155,13 @@ Messages are single-line JSON objects on stdin/stdout. The `write()` and `read()
 functions handle serialization. Event types: `init`, `upload`, `download`, `terminate`,
 `progress`, `complete`.
 
-### Subprocess Usage
+### RC API
 
-rclone is invoked via `subprocess.Popen` with `stdout=PIPE, stderr=PIPE`. Progress
-is parsed from rclone's JSON log output on stderr. Always use `--use-json-log` and
-`--ask-password=false` when calling rclone.
+Transfers use `rclone rcd` (the rclone Remote Control daemon) rather than spawning
+rclone subprocesses per file. The daemon is started in `init()` on a free loopback
+port (`--rc-no-auth --rc-addr 127.0.0.1:<port>`) and stopped on `terminate`. File
+copies use `operations/copyfile` with `_async: true`; progress is polled via
+`core/stats` + `job/status`. The `_rc()` helper uses `urllib.request` (stdlib only).
 
 ## Testing Notes
 
@@ -182,7 +177,7 @@ is parsed from rclone's JSON log output on stderr. Always use `--use-json-log` a
 
 1. **Do not write to stdout** except through the `write()` function for protocol messages.
 2. **No third-party dependencies** — stdlib only by design.
-3. **Run `black` and `ruff`** on any modified Python files before committing.
+3. **Run `ruff format` and `ruff check`** on any modified Python files before committing.
 4. **Single-file module** — all production code lives in `lfsrclone.py`.
 5. **The `pathjoin()` function is not `os.path.join`** — it handles rclone remote
    colon syntax; do not replace it with `os.path.join` or `pathlib`.

@@ -1,17 +1,14 @@
-# git-lfs rclone based custom transfer angent
-
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+# git-lfs rclone based custom transfer agent
 
 ****
 # Status
 
 I am not actively developing this tool anymore. There wasn't enough interest, including for my own use cases, to warrant them time. 
 
-With that said, here is my roadmap for development if I do ever return
+With that said, here is the original roadmap — items completed in this fork are marked:
 
 - Change flag API to not use the deprecated and undocumented `argparse` feature. The current approach is nice but I don't like relying on undocumented features. Instead, there will be a flag where you then specify rclone options. (minor)
-- Move to the rclone API to allow sessions greatly reducing traffic, API Calls, costs, etc. (major)
-    - I think LFS provides the way to start and end a server but I'd have to play. This is needed to make this a viable tool since you otherwise waste a ton of API calls.
+- [x] Move to the rclone API to allow sessions greatly reducing traffic, API Calls, costs, etc. (major) — **done**: uses `rclone rcd` with `operations/copyfile` via HTTP; one daemon per session
 
 ***
 
@@ -27,9 +24,8 @@ This software is still beta. A *non-exhaustive* and only *roughly* ordered list 
     - committed rclone config (similar chicken-and-egg as noted before)
     - tests for additional error capture from rclone
 - [ ] Document migrations (if possible)
-- [ ] PyPI (or do we just distribute via `pip install git+https://...`?)
-    - [ ] Better distribution and `setup.py` format
-- [ ] type annotations
+- [x] Better distribution and `pyproject.toml` format — **done**
+- [x] type annotations — **done**
 - [ ] Better parallel working so more than one thing can upload at the same time and make `--transfers` more correct.
 - [ ] real-world production testing
 
@@ -85,6 +81,7 @@ The following are optional flags that can be specified below:
 usage: lfsrclone [-h] [--log-file LOG_FILE]
                   [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL,NONE}]
                   [--rclone-exe RCLONE_EXE] [--temp-dir TEMP_DIR]
+                  [--rc-stats-interval RC_STATS_INTERVAL]
                   remote
 
 positional arguments:
@@ -101,8 +98,11 @@ optional arguments:
                         ['rclone'] Specify rclone executable.
   --temp-dir TEMP_DIR   [.git/lfsrclone-tmp] Specify a temporary download
                         directory
+  --rc-stats-interval RC_STATS_INTERVAL
+                        [0.1] Polling interval in seconds for RC API progress
+                        updates
 
-All additional arguments are passed to rclone
+All additional arguments are passed to rclone rcd
 ```
 
 
@@ -186,48 +186,30 @@ git-lfs has its own way to set transfers and concurrency as does rclone. lfsrclo
 
 ## Rclone Flags
 
-You can pass any flags to rclone by XYZ but note that some are automatically set and may not be compatible with what you set. It also uses `copy` instead of `copyto` since we do not want to upload if the dest is already there (and the right size).  Notable flags THISTOOL sets:
+Additional arguments are passed directly to `rclone rcd` at startup and apply for the
+entire session. lfsrclone sets the following automatically on the daemon:
 
-- [`--size-only`][so]: We do not need ModTime so no reason to get it and some remotes are very slow. We do *not* set [`--ignore-existing`][ie] because we want to overwrite incomplete uploads. And all remotes set size
-- Progress reporting
-    - [`--log-level INFO`][log] used to make it print output (note: same as `-v`)
-    - [`--use-json-log`][json] makes the output easier to parse
-- [`--no-traverse`][nt] Single transfers only so we can save listing
-- [`--ask-password=false`][ap] No password prompts. Better to error
+- [`--rc-no-auth`][rc]: no authentication required (loopback only)
+- [`--ask-password=false`][ap]: no password prompts
 
-[ie]:https://rclone.org/docs/#ignore-existing
-[so]:https://rclone.org/docs/#size-only
-[log]: https://rclone.org/docs/#logging
-[json]:https://rclone.org/docs/#use-json-log
-[nt]:https://rclone.org/docs/#no-traverse
+Per-transfer options that previously had to be passed as rclone flags are now handled
+internally via the RC API `_config` parameter:
+
+- `SizeOnly: true` (equivalent to `--size-only`) — skip ModTime checks
+
+[rc]:https://rclone.org/rc/
 [ap]:https://rclone.org/docs/#configuration-encryption
 
 ### Tips
 
-You can force rclone, and therefore LFS, to provide updates more often with `--stats`. For example: `--stats 100ms` will update 10 times a second.
-
-### Rclone Setup
-
-You can set up any rclone remote. However, if you use crypt, consider whether or not you need directory name encryption. Files are stored in a content-addressable manner of `<first hex byte>/<second hex byte>/<hex name>`. Encrypting the filenames make sense as they are the SHA256 and, while unlikely for most content, could leak the contents. However, unless the first two bytes of the SHA256 are critical, encrypting the leading directory names adds a lot of length to the file name. 
-
-For example, the following encrypts 70 characters
-
-    53/a0/53a079ad5d55c455b3d617a60117fd7f87ac8c0097454c63c3e5c91fdca9d1af
-
-to 182 characters
-
-    fi7dlav8hvdcpf6kjpth26q40o/kjj1o6gs49ee5pmmij57rb0a2k/d696m9fgemb461gv0gsqroqrkojb9pg15q1ito7idtigpc1itaskqbmqdmmes3g78dvgki4jb80tth36dmj6opum9kbbrblkig34hk8qkquodng9kc59pauesmbjfj2c
-    
-while disabling directory name  sets it to 134 characters
-
-    53/a0/d696m9fgemb461gv0gsqroqrkojb9pg15q1ito7idtigpc1itaskqbmqdmmes3g78dvgki4jb80tth36dmj6opum9kbbrblkig34hk8qkquodng9kc59pauesmbjfj2c
+Progress granularity is controlled by `--rc-stats-interval` (default 0.1 s). Pass
+`--rc-stats-interval 0.05` for finer updates.
 
 ### Incompatible Flags
 
-This is **not exhaustive** but do not set the following:
+Do not pass the following — lfsrclone sets them internally:
 
-- `--progress` since we parse it out
-- `-v` or `--log-level` since we use it already
+- `--rc-addr`, `--rc-no-auth` — managed by lfsrclone
 
 ## Known Limitations
 
@@ -235,7 +217,7 @@ This is **not exhaustive** but do not set the following:
 
 ## Contributing
 
-All code should run through [black](https://github.com/psf/black)
+Format and lint with `ruff format` and `ruff check` before committing.
 
 ## Background
 
