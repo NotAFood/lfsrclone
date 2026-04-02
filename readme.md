@@ -26,7 +26,7 @@ This software is still beta. A *non-exhaustive* and only *roughly* ordered list 
 - [ ] Document migrations (if possible)
 - [x] Better distribution and `pyproject.toml` format — **done**
 - [x] type annotations — **done**
-- [ ] Better parallel working so more than one thing can upload at the same time and make `--transfers` more correct.
+- [x] Better parallel working — **done**: see Concurrency and Transfers below
 - [ ] real-world production testing
 
 
@@ -162,7 +162,24 @@ inside the repo
 
 ## Concurrency and Transfers
 
-git-lfs has its own way to set transfers and concurrency as does rclone. lfsrclone will not try to deduce that in any way. It will run on the number of transfers called. See [`lfs.concurrenttransfers`][concurrent] to set the number or [`lfs.customtransfer.<name>.concurrent`][custom concurrent] to disable. Alternatively or in addition, you can set `--transfers N` flag for rclone
+The [custom transfer protocol][cta] is serial per process: git-lfs sends one
+transfer event and waits for the `complete` response before sending the next.
+Parallelism is achieved by git-lfs spawning **multiple lfsrclone processes
+simultaneously**, each handling its own serial stream of transfers.
+
+The right knob is [`lfs.concurrenttransfers`][concurrent] (default 8), which
+controls how many lfsrclone processes git-lfs runs at once. Each process starts
+one `rclone rcd` daemon at init time and reuses it for all its transfers, so
+startup cost is paid once per session rather than once per file.
+
+rclone's `--transfers` flag has no effect here: each daemon handles one file
+at a time by protocol, and splitting transfers across multiple daemons is
+already what `lfs.concurrenttransfers` does. Don't set `--transfers` expecting
+it to improve throughput.
+
+To cap or expand parallelism, set:
+
+    $ git config lfs.concurrenttransfers 4
 
 [concurrent]:https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-config.5.ronn#upload-and-download-transfer-settings
 [custom concurrent]: https://github.com/git-lfs/git-lfs/blob/main/docs/custom-transfers.md#defining-a-custom-transfer-type
