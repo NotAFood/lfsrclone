@@ -7,7 +7,7 @@ name = "lfsrclone"
 version = "20220317.1.BETA"
 description = "git-lfs rclone custom transfer agent"
 readme = "readme.md"
-license = { file = "license" }
+license = { text = "MIT" }
 authors = [{ name = "Justin Winokur", email = "Jwink3101@users.noreply.github.com" }]
 requires-python = ">=3.9"
 dependencies = []
@@ -17,10 +17,6 @@ lfsrclone = "lfsrclone:main"
 
 [project.urls]
 Homepage = "https://github.com/Jwink3101/lfsrclone"
-
-[tool.black]
-line-length = 88
-target-version = ["py39"]
 
 [tool.ruff]
 line-length = 88
@@ -36,8 +32,11 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "E501", # line too long — black handles this
+    "E501", # line too long — ruff format handles this
 ]
+
+[tool.ruff.format]
+quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

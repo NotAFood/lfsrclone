@@ -66,36 +66,32 @@ Tests are integration tests — they run real git, git-lfs, and rclone against a
 local rclone alias remote. A session-scoped fixture builds the full environment
 once; tests are independent and can be run individually.
 
-### Formatting
+### Formatting and Linting
 
 ```bash
-black lfsrclone.py tests/
+ruff format lfsrclone.py tests/
+ruff check lfsrclone.py tests/
 
 # Check without modifying
-black --check lfsrclone.py tests/
-```
-
-### Linting
-
-```bash
-ruff check lfsrclone.py tests/
+ruff format --check lfsrclone.py tests/
 
 # Auto-fix what ruff can
 ruff check --fix lfsrclone.py tests/
 ```
 
-Both tools are configured in `pyproject.toml`. Run both before committing.
+Both configured in `pyproject.toml`. Run both before committing.
 
 ## Code Style Guidelines
 
 ### Formatter
 
-**black** — all code must pass `black --check`. This is the only enforced style rule.
+**ruff format** — all code must pass `ruff format --check`. Produces black-compatible
+output; black is not used or installed.
 
 ### Linter
 
 **ruff** — configured in `pyproject.toml`. Rules enabled: E, W, F (pyflakes), I (isort),
-B (bugbear), UP (pyupgrade). E501 (line length) is disabled — black handles that.
+B (bugbear), UP (pyupgrade). E501 (line length) is disabled — ruff format handles that.
 
 ### Python Version
 
