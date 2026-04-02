@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lfsrclone"
+version = "20220317.1.BETA"
+description = "git-lfs rclone custom transfer agent"
+readme = "readme.md"
+license = { file = "license" }
+authors = [{ name = "Justin Winokur", email = "Jwink3101@users.noreply.github.com" }]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+lfsrclone = "lfsrclone:main"
+
+[project.urls]
+Homepage = "https://github.com/Jwink3101/lfsrclone"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501", # line too long — black handles this
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -2,14 +2,16 @@
 """
 lfsrclone: rclone-based transfer agent for git-lfs
 """
+
 __version__ = "20220317.1.BETA"
 
 import argparse
-import sys, os
 import json
-import tempfile
-import subprocess
 import logging
+import os
+import subprocess
+import sys
+import tempfile
 
 
 def write(msg=None):
@@ -79,6 +81,7 @@ class Main:
         logging.debug("args: %s", args)
         logging.debug("rclone: %s", rclone_args)
 
+    def run(self):
         self.init()
         self.loop()
 
@@ -189,11 +192,15 @@ class Main:
         logging.debug("Action %s complete: %s", (self.c, msg))
 
 
+def main():
+    Main().run()
+
+
 def pathjoin(*args):
     """
     This is like os.path.join but does some rclone-specific things because there could be
     a ':' in the first part.
-    
+
     The second argument could be '/file', or 'file' and the first could have a colon.
         pathjoin('a','b')   # a/b
         pathjoin('a:','b')  # a:b
@@ -218,4 +225,4 @@ def pathjoin(*args):
 
 
 if __name__ == "__main__":
-    Main(sys.argv[1:])
+    main()
